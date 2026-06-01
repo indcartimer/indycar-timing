@@ -82,14 +82,15 @@
     .tab-btn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);padding:7px 16px;font-family:'Orbitron',monospace;font-size:9px;font-weight:700;border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all .2s;}
     .tab-btn:hover{color:var(--accent-cyan);border-color:var(--accent-cyan);}
     .tab-btn.active{background:rgba(0,229,255,.1);color:var(--accent-cyan);border-color:var(--accent-cyan);}
+    /* Grid badge */
+    .grid-badge{font-family:'Orbitron',monospace;font-size:9px;color:var(--text-dim);background:rgba(255,255,255,.04);padding:2px 6px;border-radius:2px;}
+    .status-dnf{color:var(--accent-red);font-family:'Orbitron',monospace;font-size:10px;}
     footer{margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
     footer span{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:1px;}
     #loading-overlay{position:fixed;inset:0;background:var(--bg-primary);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9998;gap:16px;}
     .loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent-red);border-radius:50%;animation:spin .8s linear infinite;}
     @keyframes spin{to{transform:rotate(360deg)}}
     .loading-text{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--text-muted);}
-    @keyframes row-flash{0%{background:rgba(192,132,252,.1)}100%{background:transparent}}
-    .row-updated{animation:row-flash .6s ease-out;}
   </style>
 </head>
 <body>
@@ -150,8 +151,7 @@
   <!-- CALENDARIO + RESULTADOS -->
   <div id="view-cal" style="display:none;">
     <div id="cal-status" class="status-badge loading">⟳ CARGANDO...</div>
-    
-    <!-- Lista de eventos -->
+
     <div id="panel-events">
       <div class="table-wrapper">
         <table class="schedule-table">
@@ -161,17 +161,16 @@
       </div>
     </div>
 
-    <!-- Resultados de evento seleccionado -->
     <div id="panel-results" style="display:none;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
         <button id="btn-back" class="nav-btn">← VOLVER</button>
         <span id="results-title" style="font-family:'Orbitron',monospace;font-size:13px;color:var(--accent-gold);letter-spacing:1px;"></span>
       </div>
       <div class="tabs" id="results-tabs"></div>
-      <div id="results-status" class="status-badge loading" style="display:none;"></div>
+      <div id="results-status" class="status-badge loading"></div>
       <div class="table-wrapper">
-        <table class="timing-table">
-          <thead><tr><th>POS</th><th>#</th><th>PILOTO</th><th>PAÍS</th><th>PUNTOS</th></tr></thead>
+        <table class="timing-table" id="results-table">
+          <thead id="results-thead"></thead>
           <tbody id="results-body"></tbody>
         </table>
       </div>
@@ -210,6 +209,22 @@ function fT(s,d=false){
   if(d)return`+${s.toFixed(3)}`;
   const m=Math.floor(s/60),sc=(s%60).toFixed(3);
   return m>0?`${m}:${sc.padStart(6,'0')}`:sc;
+}
+
+// Calcular gap entre dos tiempos tipo "1:59:08.5542"
+function calcGap(timeLeader, timeDriver) {
+  try {
+    const toSec = t => {
+      const parts = t.split(':');
+      if(parts.length===3) return +parts[0]*3600 + +parts[1]*60 + +parts[2];
+      if(parts.length===2) return +parts[0]*60 + +parts[1];
+      return +parts[0];
+    };
+    const diff = toSec(timeDriver) - toSec(timeLeader);
+    if(diff<=0) return 'LÍDER';
+    if(diff>=60) return `+${Math.floor(diff/60)}L ${(diff%60).toFixed(3)}s`;
+    return `+${diff.toFixed(3)}s`;
+  } catch(e){ return '-'; }
 }
 
 function renderSim(){
@@ -301,7 +316,6 @@ function tick(){
   });
   renderSim();
 }
-
 function arrancar(){clearInterval(timer);timer=setInterval(tick,velMs);}
 
 document.getElementById('btn-play-pause').addEventListener('click',function(){
@@ -339,37 +353,33 @@ async function api(ep){
 }
 
 // ── CALENDARIO ───────────────────────────────────────────────
-let allEvents=[];
-
 async function loadCalendar(){
   const st=document.getElementById('cal-status');
   st.className='status-badge loading';st.textContent='⟳ CARGANDO CALENDARIO 2026...';
   try{
     const data=await api(`sport_events/${SEASON}/summary`);
-    allEvents=data.stage?.stages||[];
+    const events=data.stage?.stages||[];
     const tbody=document.getElementById('schedule-body');
     tbody.innerHTML='';
-    allEvents.forEach((ev,i)=>{
+    events.forEach((ev,i)=>{
       if(!ev.description)return;
       const d=ev.scheduled?new Date(ev.scheduled).toLocaleDateString('es-DO',{day:'2-digit',month:'short',year:'numeric'}):'--';
       const closed=ev.status==='Closed'||ev.status==='closed';
       const tr=document.createElement('tr');
-      tr.className='clickable';
+      tr.className=closed?'clickable':'';
       tr.innerHTML=`
         <td class="round-num">${String(i+1).padStart(2,'0')}</td>
         <td class="event-name">${ev.description}</td>
         <td style="color:var(--text-muted);font-size:13px;">${ev.venue?.name||'-'}</td>
         <td class="event-date">${d}</td>
-        <td><span class="ev-status ${closed?'s-closed':'s-scheduled'}">${closed?'FINALIZADO':'PRÓXIMO'}</span></td>`;
-      if(closed){
-        tr.addEventListener('click',()=>loadEventResults(ev));
-      }
+        <td><span class="ev-status ${closed?'s-closed':'s-scheduled'}">${closed?'▶ VER RESULTADOS':'PRÓXIMO'}</span></td>`;
+      if(closed) tr.addEventListener('click',()=>loadEventResults(ev));
       tbody.appendChild(tr);
     });
     st.className='status-badge ok';
-    st.textContent=`✓ TEMPORADA 2026 — ${allEvents.length} EVENTOS — CLIC EN FINALIZADO PARA VER RESULTADOS`;
+    st.textContent=`✓ TEMPORADA 2026 — ${events.length} EVENTOS`;
   }catch(e){
-    st.className='status-badge error';st.textContent='✗ ERROR AL CARGAR CALENDARIO';
+    st.className='status-badge error';st.textContent='✗ ERROR AL CARGAR';
   }
 }
 
@@ -383,116 +393,160 @@ async function loadEventResults(ev){
   document.getElementById('results-tabs').innerHTML='';
   document.getElementById('results-body').innerHTML='';
   const rs=document.getElementById('results-status');
-  rs.style.display='flex';rs.className='status-badge loading';rs.textContent='⟳ CARGANDO SESIONES...';
+  rs.className='status-badge loading';rs.textContent='⟳ CARGANDO SESIONES...';
 
   try{
     const data=await api(`sport_events/${ev.id}/summary`);
     const stages=data.stage?.stages||[];
     eventStages={};
 
-    // Clasificar sesiones
     stages.forEach(s=>{
       const t=(s.type||'').toLowerCase();
       const d=(s.description||'').toLowerCase();
-      if(t==='race'||d.includes('race')||d.includes('carrera')){
+      if(t==='race'||d==='race'){
         eventStages['CARRERA']=s;
-      } else if(t==='qualifying'||d.includes('qualifying')||d.includes('fast')){
-        if(!eventStages['CLASIFICACIÓN']) eventStages['CLASIFICACIÓN']=s;
-        else eventStages['CLASIFICACIÓN 2']=s;
+      } else if(t==='qualifying'||d.includes('qualif')||d.includes('fast')){
+        const n=Object.keys(eventStages).filter(k=>k.startsWith('CLASIF')).length;
+        eventStages[n===0?'CLASIFICACIÓN':`CLASIFICACIÓN ${n+1}`]=s;
       } else if(t==='practice'||d.includes('practice')){
-        const num=Object.keys(eventStages).filter(k=>k.startsWith('PRÁCTICA')).length+1;
-        eventStages[`PRÁCTICA ${num}`]=s;
+        const n=Object.keys(eventStages).filter(k=>k.startsWith('PRÁCT')).length;
+        eventStages[`PRÁCTICA ${n+1}`]=s;
       }
     });
 
-    // Si no hay sub-sesiones, el evento mismo tiene los datos
-    if(Object.keys(eventStages).length===0){
-      eventStages['RESULTADO']=ev;
-    }
+    if(Object.keys(eventStages).length===0) eventStages['RESULTADO']=ev;
 
-    // Crear tabs
     const tabsEl=document.getElementById('results-tabs');
-    Object.keys(eventStages).forEach((label,i)=>{
+    // Orden preferido
+    const orden=['CARRERA','CLASIFICACIÓN','CLASIFICACIÓN 2','PRÁCTICA 1','PRÁCTICA 2','PRÁCTICA 3','PRÁCTICA 4','PRÁCTICA 5','RESULTADO'];
+    const keys=orden.filter(k=>eventStages[k]).concat(Object.keys(eventStages).filter(k=>!orden.includes(k)));
+
+    keys.forEach((label,i)=>{
       const btn=document.createElement('button');
       btn.className=`tab-btn${i===0?' active':''}`;
       btn.textContent=label;
       btn.addEventListener('click',function(){
-        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('#results-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
         this.classList.add('active');
-        loadSessionResults(eventStages[label]);
+        loadSessionResults(eventStages[label], label);
       });
       tabsEl.appendChild(btn);
     });
 
-    // Cargar primera sesión disponible — priorizar CARRERA
-    const firstKey=eventStages['CARRERA']?'CARRERA':Object.keys(eventStages)[0];
-    // Marcar tab correcto
-    document.querySelectorAll('.tab-btn').forEach(b=>{
-      b.classList.toggle('active',b.textContent===firstKey);
-    });
-    await loadSessionResults(eventStages[firstKey]);
+    if(keys.length>0) await loadSessionResults(eventStages[keys[0]], keys[0]);
 
   }catch(e){
     rs.className='status-badge error';rs.textContent='✗ ERROR AL CARGAR SESIONES';
   }
 }
 
-async function loadSessionResults(stage){
+async function loadSessionResults(stage, label){
   const rs=document.getElementById('results-status');
-  rs.style.display='flex';rs.className='status-badge loading';rs.textContent='⟳ CARGANDO RESULTADOS...';
+  rs.className='status-badge loading';rs.textContent=`⟳ CARGANDO ${label}...`;
   const tbody=document.getElementById('results-body');
+  const thead=document.getElementById('results-thead');
   tbody.innerHTML='';
+
+  const isRace = label && label.includes('CARRERA');
+  const isQualy = label && label.includes('CLASIF');
 
   try{
     const data=await api(`sport_events/${stage.id}/summary`);
-    
-    // Los datos pueden estar en competitors (nivel evento) o results (nivel sesión)
-    const competitors = data.stage?.competitors || data.competitors || [];
-    const stageResults = data.stage?.results || data.results || [];
+    const competitors=data.stage?.competitors||data.competitors||[];
 
-    // Usar competitors si tienen result.position
-    let rows=[];
-    if(competitors.length>0 && competitors[0].result){
-      rows=competitors.map(c=>({
-        pos: c.result.position||'?',
-        num: c.result.car_number||c.car_number||'-',
-        nombre: c.name||'?',
-        pais: c.nationality||c.country_code||'-',
-        puntos: c.result.points||'-',
-      })).sort((a,b)=>parseInt(a.pos)-parseInt(b.pos));
-    } else if(stageResults.length>0){
-      rows=stageResults.map(r=>({
-        pos: r.position||'?',
-        num: r.competitor?.car_number||r.car_number||'-',
-        nombre: r.competitor?.name||r.name||'?',
-        pais: r.competitor?.nationality||'-',
-        puntos: r.points||'-',
-      })).sort((a,b)=>parseInt(a.pos)-parseInt(b.pos));
-    }
-
-    if(rows.length===0){
-      tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:30px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;">SIN RESULTADOS PARA ESTA SESIÓN</td></tr>`;
+    if(competitors.length===0||!competitors[0]?.result){
+      tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:30px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;">SIN RESULTADOS — SESIÓN PENDIENTE O SIN DATOS</td></tr>`;
       rs.className='status-badge error';rs.textContent='⚠ SIN RESULTADOS DISPONIBLES';
       return;
     }
 
-    rows.forEach(r=>{
-      const pos=parseInt(r.pos);
+    // Ordenar por posición
+    const sorted=[...competitors].sort((a,b)=>(a.result?.position||99)-(b.result?.position||99));
+    const leaderTime = sorted[0]?.result?.time || null;
+    const fastestLap = sorted.reduce((best,c)=>{
+      const t=c.result?.fastest_lap_time;
+      if(!t)return best;
+      return(!best||t<best)?t:best;
+    }, null);
+
+    // Headers según tipo de sesión
+    if(isRace){
+      thead.innerHTML=`<tr>
+        <th>POS</th><th>#</th><th>PILOTO</th><th>PAÍS</th>
+        <th>TIEMPO CARRERA</th><th>GAP LÍDER</th>
+        <th>MEJOR VUELTA</th><th>VUELTAS</th><th>SALIDA</th>
+      </tr>`;
+    } else if(isQualy){
+      thead.innerHTML=`<tr>
+        <th>POS</th><th>#</th><th>PILOTO</th><th>PAÍS</th>
+        <th>MEJOR VUELTA</th><th>GAP LÍDER</th><th>VELOCIDAD</th>
+      </tr>`;
+    } else {
+      thead.innerHTML=`<tr>
+        <th>POS</th><th>#</th><th>PILOTO</th><th>PAÍS</th>
+        <th>MEJOR VUELTA</th><th>GAP</th><th>VUELTAS</th>
+      </tr>`;
+    }
+
+    sorted.forEach((c,i)=>{
+      const r=c.result||{};
+      const pos=r.position||i+1;
+      const num=r.car_number||'-';
+      const nombre=c.name||'?';
+      const pais=c.nationality||c.country_code||'-';
+      const finished=r.status==='Finished'||!r.status;
+      const posClass=pos<=3?'pos-cell top3':'pos-cell';
+      const isFastestLap = fastestLap && r.fastest_lap_time===fastestLap;
+
+      const fastLapHtml = r.fastest_lap_time
+        ? `<span class="time-best ${isFastestLap?'purple':'cyan'}">${r.fastest_lap_time}${isFastestLap?' ⚡':''}</span>`
+        : `<span class="time-best dim">--:--</span>`;
+
+      let gap='-';
+      if(pos===1) gap='LÍDER';
+      else if(!finished) gap=`<span class="status-dnf">${r.status||'DNF'}</span>`;
+      else if(r.time&&leaderTime) gap=calcGap(leaderTime,r.time);
+
       const tr=document.createElement('tr');
-      tr.innerHTML=`
-        <td class="${pos<=3?'pos-cell top3':'pos-cell'}">${r.pos}</td>
-        <td class="num-cell">${r.num}</td>
-        <td><span class="driver-name" style="color:var(--white)">${r.nombre}</span></td>
-        <td style="color:var(--text-muted);font-size:12px;font-family:'Share Tech Mono',monospace;">${r.pais}</td>
-        <td><span class="time-best ${pos===1?'purple':'cyan'}">${r.puntos}</span></td>`;
+
+      if(isRace){
+        tr.innerHTML=`
+          <td class="${posClass}">${pos}</td>
+          <td class="num-cell">${num}</td>
+          <td><span class="driver-name" style="color:var(--white)">${nombre}</span></td>
+          <td style="color:var(--text-muted);font-size:12px;font-family:'Share Tech Mono',monospace;">${pais}</td>
+          <td><span class="time-best ${pos===1?'purple':'cyan'}">${r.time||'--:--'}</span></td>
+          <td><span class="gap-cell ${pos===1?'leader':''}">${gap}</span></td>
+          <td>${fastLapHtml}</td>
+          <td style="color:var(--text-muted);font-size:12px;font-family:'Share Tech Mono',monospace;">${r.laps||'-'}</td>
+          <td><span class="grid-badge">${r.grid?'P'+r.grid:'-'}</span></td>`;
+      } else if(isQualy){
+        const speed=r.speed?`${parseFloat(r.speed).toFixed(3)} mph`:'--';
+        tr.innerHTML=`
+          <td class="${posClass}">${pos}</td>
+          <td class="num-cell">${num}</td>
+          <td><span class="driver-name" style="color:var(--white)">${nombre}</span></td>
+          <td style="color:var(--text-muted);font-size:12px;font-family:'Share Tech Mono',monospace;">${pais}</td>
+          <td>${fastLapHtml}</td>
+          <td><span class="gap-cell ${pos===1?'leader':''}">${gap}</span></td>
+          <td style="color:var(--accent-cyan);font-family:'Share Tech Mono',monospace;font-size:12px;">${speed}</td>`;
+      } else {
+        tr.innerHTML=`
+          <td class="${posClass}">${pos}</td>
+          <td class="num-cell">${num}</td>
+          <td><span class="driver-name" style="color:var(--white)">${nombre}</span></td>
+          <td style="color:var(--text-muted);font-size:12px;font-family:'Share Tech Mono',monospace;">${pais}</td>
+          <td>${fastLapHtml}</td>
+          <td><span class="gap-cell ${pos===1?'leader':''}">${gap}</span></td>
+          <td style="color:var(--text-muted);font-size:12px;font-family:'Share Tech Mono',monospace;">${r.laps||'-'}</td>`;
+      }
       tbody.appendChild(tr);
     });
 
     rs.className='status-badge ok';
-    rs.textContent=`✓ ${rows.length} PILOTOS — DATOS REALES SPORTRADAR`;
+    rs.textContent=`✓ ${label} — ${sorted.length} PILOTOS — DATOS REALES SPORTRADAR${fastestLap?' — VUELTA RÁPIDA: '+fastestLap:''}`;
   }catch(e){
     rs.className='status-badge error';rs.textContent='✗ ERROR AL CARGAR';
-    tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:30px;font-family:'Orbitron',monospace;font-size:10px;">ERROR DE CONEXIÓN</td></tr>`;
   }
 }
 
@@ -523,10 +577,8 @@ document.getElementById('btn-back').addEventListener('click',function(){
   document.getElementById('panel-events').style.display='block';
 });
 
-// ── RELOJ ────────────────────────────────────────────────────
 setInterval(()=>{document.getElementById('footer-clock').textContent=new Date().toLocaleTimeString('es-DO',{hour12:false});},1000);
 
-// ── INICIO ───────────────────────────────────────────────────
 renderSim();arrancar();
 document.getElementById('session-info').textContent='▸ SIMULACIÓN HISTÓRICA  |  GP DE BARBER — FAST 12';
 document.getElementById('loading-overlay').style.display='none';
