@@ -96,7 +96,7 @@
 <body>
 <div id="loading-overlay">
   <div class="loading-spinner"></div>
-  <div class="loading-text">CARGANDO INDYCAR 2026...</div>
+  <div class="loading-text">LOADING INDYCAR 2026...</div>
 </div>
 <div class="container">
   <header>
@@ -122,7 +122,7 @@
         <span class="time-digital">10:00</span>
       </div>
       <div class="speed-container">
-        <span>VEL:</span>
+        <span>SPEED:</span>
         <select id="speed-select" class="speed-dropdown">
           <option value="1000">1x</option><option value="500">2x</option>
           <option value="200">5x</option><option value="50">20x</option>
@@ -358,7 +358,7 @@ async function api(ep){
 // ── SCHEDULE ───────────────────────────────────────────────
 async function loadCalendar(){
   const st=document.getElementById('cal-status');
-  st.className='status-badge loading';st.textContent='⟳ CARGANDO SCHEDULE 2026...';
+  st.className='status-badge loading';st.textContent='⟳ LOADING SCHEDULE 2026...';
   try{
     const data=await api(`sport_events/${SEASON}/summary`);
     const events=data.stage?.stages||[];
@@ -445,7 +445,7 @@ async function loadEventResults(ev){
 
 async function loadSessionResults(stage, label){
   const rs=document.getElementById('results-status');
-  rs.className='status-badge loading';rs.textContent=`⟳ CARGANDO ${label}...`;
+  rs.className='status-badge loading';rs.textContent=`⟳ LOADING ${label}...`;
   const tbody=document.getElementById('results-body');
   const thead=document.getElementById('results-thead');
   tbody.innerHTML='';
@@ -458,8 +458,8 @@ async function loadSessionResults(stage, label){
     const competitors=data.stage?.competitors||data.competitors||[];
 
     if(competitors.length===0||!competitors[0]?.result){
-      tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:30px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;">SIN RESULTS — SESIÓN PENDIENTE O SIN DATOS</td></tr>`;
-      rs.className='status-badge error';rs.textContent='⚠ SIN RESULTS DISPONIBLES';
+      tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:30px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;">SIN RESULTS — SESSION PENDING OR NO DATA</td></tr>`;
+      rs.className='status-badge error';rs.textContent='⚠ SIN RESULTS AVAILABLE';
       return;
     }
 
